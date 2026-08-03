@@ -1,1 +1,8 @@
-
+{
+  "name": "fuel-log-backend",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "googleapis": "^131.0.0"
+  }
+}
