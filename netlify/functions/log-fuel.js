@@ -79,7 +79,7 @@ exports.handler = async (event) => {
       const sheets = google.sheets({ version: 'v4', auth: getAuth() });
       const res = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `'${sheetName}'!A2:F10000`
+        range: `'${sheetName}'!A2:H10000`
       });
       return { statusCode: 200, headers, body: JSON.stringify({ rows: res.data.values || [] }) };
     } catch (err) {
@@ -140,7 +140,7 @@ exports.handler = async (event) => {
         range: `'${sheetName}'!A1`,
         valueInputOption: 'RAW',
         requestBody: {
-          values: [['Timestamp', 'Aircraft Registration', 'Date', 'Fuel Type', 'Liters', 'Running Total (L)']]
+          values: [['Timestamp', 'Aircraft Registration', 'Date', 'Fuel Type', 'Meter Before (L)', 'Meter After (L)', 'Liters', 'Running Total (L)']]
         }
       });
     } catch (e) {
@@ -157,6 +157,8 @@ exports.handler = async (event) => {
           data.reg,
           data.date,
           data.fuelType,
+          data.meterBefore,
+          data.meterAfter,
           data.liters,
           data.total
         ]]
