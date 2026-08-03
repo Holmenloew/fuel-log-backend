@@ -73,6 +73,22 @@ exports.handler = async (event) => {
     if (!fuelType) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fuelType query param' }) };
     }
+
+    // Tank level / refill reading history for a given fuel type
+    if (qs.resource === 'tank_readings') {
+      const sheetName = 'Tank Readings - ' + fuelType;
+      try {
+        const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+        const res = await sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: `'${sheetName}'!A2:D10000`
+        });
+        return { statusCode: 200, headers, body: JSON.stringify({ rows: res.data.values || [] }) };
+      } catch (err) {
+        return { statusCode: 200, headers, body: JSON.stringify({ rows: [] }) };
+      }
+    }
+
     const sheetName = 'Fuel Log - ' + fuelType;
     try {
       const sheets = google.sheets({ version: 'v4', auth: getAuth() });
@@ -114,6 +130,53 @@ exports.handler = async (event) => {
           ]
         }
       });
+      return { statusCode: 200, headers, body: JSON.stringify({ status: 'ok' }) };
+    } catch (err) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    }
+  }
+
+  // Log a tank level reading (e.g. a refill), with an optional short note
+  if (data.resource === 'tank_reading') {
+    if (!data.fuelType || data.level === undefined || data.level === null) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fuelType or level' }) };
+    }
+    try {
+      const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+      const sheetName = 'Tank Readings - ' + data.fuelType;
+
+      try {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId,
+          requestBody: { requests: [{ addSheet: { properties: { title: sheetName } } }] }
+        });
+      } catch (e) {
+        // Tab likely already exists — safe to continue
+      }
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${sheetName}'!A1:D1`,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: [['Timestamp', 'Fuel Type', 'Recorded Level (L)', 'Note']]
+        }
+      });
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: `'${sheetName}'!A1`,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: [[
+            new Date().toISOString(),
+            data.fuelType,
+            data.level,
+            data.note || ''
+          ]]
+        }
+      });
+
       return { statusCode: 200, headers, body: JSON.stringify({ status: 'ok' }) };
     } catch (err) {
       return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
