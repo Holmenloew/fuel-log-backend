@@ -64,7 +64,6 @@ exports.handler = async (event) => {
         }
         return { statusCode: 200, headers, body: JSON.stringify({ aircraft, tanks }) };
       } catch (err) {
-        // Config tab doesn't exist yet — nothing has been saved there
         return { statusCode: 200, headers, body: JSON.stringify({ aircraft: [], tanks: null }) };
       }
     }
@@ -135,38 +134,21 @@ exports.handler = async (event) => {
         spreadsheetId,
         requestBody: { requests: [{ addSheet: { properties: { title: sheetName } } }] }
       });
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: `'${sheetName}'!A1`,
-        valueInputOption: 'RAW',
-        requestBody: {
-          values: [['Timestamp', 'Aircraft Registration', 'Date', 'Fuel Type', 'Meter Before (L)', 'Meter After (L)', 'Liters', 'Running Total (L)']]
-        }
-      });
     } catch (e) {
       // Tab likely already exists — safe to continue
     }
+
+    // Always keep the header row current, even for tabs created before this schema existed
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `'${sheetName}'!A1:H1`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [['Timestamp', 'Aircraft Registration', 'Date', 'Fuel Type', 'Meter Before (L)', 'Meter After (L)', 'Liters', 'Running Total (L)']]
+      }
+    });
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
       range: `'${sheetName}'!A1`,
       valueInputOption: 'RAW',
-      requestBody: {
-        values: [[
-          new Date().toISOString(),
-          data.reg,
-          data.date,
-          data.fuelType,
-          data.meterBefore,
-          data.meterAfter,
-          data.liters,
-          data.total
-        ]]
-      }
-    });
-
-    return { statusCode: 200, headers, body: JSON.stringify({ status: 'ok' }) };
-  } catch (err) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
-  }
-};
