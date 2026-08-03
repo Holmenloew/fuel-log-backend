@@ -152,3 +152,22 @@ exports.handler = async (event) => {
       spreadsheetId,
       range: `'${sheetName}'!A1`,
       valueInputOption: 'RAW',
+      requestBody: {
+        values: [[
+          new Date().toISOString(),
+          data.reg,
+          data.date,
+          data.fuelType,
+          data.meterBefore,
+          data.meterAfter,
+          data.liters,
+          data.total
+        ]]
+      }
+    });
+
+    return { statusCode: 200, headers, body: JSON.stringify({ status: 'ok' }) };
+  } catch (err) {
+    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+  }
+};
