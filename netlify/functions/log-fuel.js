@@ -94,7 +94,7 @@ exports.handler = async (event) => {
       const sheets = google.sheets({ version: 'v4', auth: getAuth() });
       const res = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `'${sheetName}'!A2:H10000`
+        range: `'${sheetName}'!A2:I10000`
       });
       return { statusCode: 200, headers, body: JSON.stringify({ rows: res.data.values || [] }) };
     } catch (err) {
@@ -204,10 +204,10 @@ exports.handler = async (event) => {
     // Always keep the header row current, even for tabs created before this schema existed
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `'${sheetName}'!A1:H1`,
+      range: `'${sheetName}'!A1:I1`,
       valueInputOption: 'RAW',
       requestBody: {
-        values: [['Timestamp', 'Aircraft Registration', 'Date', 'Fuel Type', 'Meter Before (L)', 'Meter After (L)', 'Liters', 'Running Total (L)']]
+        values: [['Timestamp', 'Aircraft Registration', 'Date', 'Fuel Type', 'Meter Before (L)', 'Meter After (L)', 'Liters', 'Running Total (L)', 'Logged By']]
       }
     });
 
@@ -224,7 +224,8 @@ exports.handler = async (event) => {
           data.meterBefore,
           data.meterAfter,
           data.liters,
-          data.total
+          data.total,
+          data.loggedBy || ''
         ]]
       }
     });
