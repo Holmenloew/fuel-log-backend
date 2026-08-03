@@ -55,4 +55,34 @@ exports.handler = async (event) => {
       });
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range:
+        range: `'${sheetName}'!A1`,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: [['Timestamp', 'Aircraft Registration', 'Date', 'Fuel Type', 'Liters', 'Running Total (L)']]
+        }
+      });
+    } catch (e) {
+      // Tab likely already exists — safe to continue
+    }
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `'${sheetName}'!A1`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [[
+          new Date().toISOString(),
+          data.reg,
+          data.date,
+          data.fuelType,
+          data.liters,
+          data.total
+        ]]
+      }
+    });
+
+    return { statusCode: 200, headers, body: JSON.stringify({ status: 'ok' }) };
+  } catch (err) {
+    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+  }
+};
