@@ -1,27 +1,58 @@
 const { google } = require('googleapis');
 
+function getAuth() {
+  return new google.auth.GoogleAuth({
+    credentials: {
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
+    },
+    scopes: ['https://www.googleapis.com/auth/spreadsheets']
+  });
+}
+
 exports.handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, X-Api-Key',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
   };
 
-  // CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
+  }
+
+  const apiKey = event.headers['x-api-key'] || event.headers['X-Api-Key'];
+  if (!process.env.FUEL_LOG_API_KEY || apiKey !== process.env.FUEL_LOG_API_KEY) {
+    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
+
+  const spreadsheetId = process.env.SHEET_ID;
+
+  // ---------- GET: read back the rows actually stored in the sheet ----------
+  if (event.httpMethod === 'GET') {
+    const fuelType = (event.queryStringParameters && event.queryStringParameters.fuelType) || '';
+    if (!fuelType) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fuelType query param' }) };
+    }
+    const sheetName = 'Fuel Log - ' + fuelType;
+    try {
+      const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `'${sheetName}'!A2:F10000`
+      });
+      return { statusCode: 200, headers, body: JSON.stringify({ rows: res.data.values || [] }) };
+    } catch (err) {
+      // Tab doesn't exist yet if nothing has been logged for this fuel type
+      return { statusCode: 200, headers, body: JSON.stringify({ rows: [] }) };
+    }
   }
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  // Simple shared-secret check so only your app can write to the sheet
-  const apiKey = event.headers['x-api-key'] || event.headers['X-Api-Key'];
-  if (!process.env.FUEL_LOG_API_KEY || apiKey !== process.env.FUEL_LOG_API_KEY) {
-    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
-  }
-
+  // ---------- POST: append a new fueling record ----------
   let data;
   try {
     data = JSON.parse(event.body || '{}');
@@ -34,20 +65,9 @@ exports.handler = async (event) => {
   }
 
   try {
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        // Netlify env vars store the key with literal \n sequences; convert back to real newlines
-        private_key: (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
-      },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-
-    const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheetId = process.env.SHEET_ID;
+    const sheets = google.sheets({ version: 'v4', auth: getAuth() });
     const sheetName = 'Fuel Log - ' + data.fuelType;
 
-    // Make sure the fuel-type tab exists with a header row (ignore error if it already exists)
     try {
       await sheets.spreadsheets.batchUpdate({
         spreadsheetId,
