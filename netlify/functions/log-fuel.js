@@ -10,6 +10,17 @@ function getAuth() {
   });
 }
 
+async function ensureConfigSheet(sheets, spreadsheetId) {
+  try {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Config' } } }] }
+    });
+  } catch (e) {
+    // Tab likely already exists — safe to continue
+  }
+}
+
 exports.handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -28,9 +39,38 @@ exports.handler = async (event) => {
 
   const spreadsheetId = process.env.SHEET_ID;
 
-  // ---------- GET: read back the rows actually stored in the sheet ----------
+  // ---------- GET ----------
   if (event.httpMethod === 'GET') {
-    const fuelType = (event.queryStringParameters && event.queryStringParameters.fuelType) || '';
+    const qs = event.queryStringParameters || {};
+
+    // Shared config: aircraft list + tank calibration/levels
+    if (qs.resource === 'config') {
+      try {
+        const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+        const res = await sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: `'Config'!A1:B2`
+        });
+        const rows = res.data.values || [];
+        let aircraft = [];
+        let tanks = null;
+        for (const row of rows) {
+          if (row[0] === 'aircraft_json' && row[1]) {
+            try { aircraft = JSON.parse(row[1]); } catch (e) {}
+          }
+          if (row[0] === 'tanks_json' && row[1]) {
+            try { tanks = JSON.parse(row[1]); } catch (e) {}
+          }
+        }
+        return { statusCode: 200, headers, body: JSON.stringify({ aircraft, tanks }) };
+      } catch (err) {
+        // Config tab doesn't exist yet — nothing has been saved there
+        return { statusCode: 200, headers, body: JSON.stringify({ aircraft: [], tanks: null }) };
+      }
+    }
+
+    // Ledger rows for a given fuel type
+    const fuelType = qs.fuelType || '';
     if (!fuelType) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fuelType query param' }) };
     }
@@ -43,7 +83,6 @@ exports.handler = async (event) => {
       });
       return { statusCode: 200, headers, body: JSON.stringify({ rows: res.data.values || [] }) };
     } catch (err) {
-      // Tab doesn't exist yet if nothing has been logged for this fuel type
       return { statusCode: 200, headers, body: JSON.stringify({ rows: [] }) };
     }
   }
@@ -52,7 +91,7 @@ exports.handler = async (event) => {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  // ---------- POST: append a new fueling record ----------
+  // ---------- POST ----------
   let data;
   try {
     data = JSON.parse(event.body || '{}');
@@ -60,6 +99,29 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
 
+  // Save shared config: aircraft list + tank calibration/levels
+  if (data.resource === 'config') {
+    try {
+      const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+      await ensureConfigSheet(sheets, spreadsheetId);
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'Config'!A1:B2`,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: [
+            ['aircraft_json', JSON.stringify(data.aircraft || [])],
+            ['tanks_json', JSON.stringify(data.tanks || {})]
+          ]
+        }
+      });
+      return { statusCode: 200, headers, body: JSON.stringify({ status: 'ok' }) };
+    } catch (err) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    }
+  }
+
+  // Append a new fueling record
   if (!data.reg || !data.date || !data.liters || !data.fuelType) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields' }) };
   }
