@@ -43,17 +43,18 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'GET') {
     const qs = event.queryStringParameters || {};
 
-    // Shared config: aircraft list + tank calibration/levels
+    // Shared config: aircraft list + tank calibration/levels + system passkey
     if (qs.resource === 'config') {
       try {
         const sheets = google.sheets({ version: 'v4', auth: getAuth() });
         const res = await sheets.spreadsheets.values.get({
           spreadsheetId,
-          range: `'Config'!A1:B2`
+          range: `'Config'!A1:B3`
         });
         const rows = res.data.values || [];
         let aircraft = [];
         let tanks = null;
+        let passkey = null;
         for (const row of rows) {
           if (row[0] === 'aircraft_json' && row[1]) {
             try { aircraft = JSON.parse(row[1]); } catch (e) {}
@@ -61,10 +62,14 @@ exports.handler = async (event) => {
           if (row[0] === 'tanks_json' && row[1]) {
             try { tanks = JSON.parse(row[1]); } catch (e) {}
           }
+          if (row[0] === 'passkey' && row[1]) {
+            passkey = row[1];
+          }
         }
-        return { statusCode: 200, headers, body: JSON.stringify({ aircraft, tanks }) };
+        return { statusCode: 200, headers, body: JSON.stringify({ aircraft, tanks, passkey }) };
       } catch (err) {
-        return { statusCode: 200, headers, body: JSON.stringify({ aircraft: [], tanks: null }) };
+        // Config tab doesn't exist yet — nothing has been saved there
+        return { statusCode: 200, headers, body: JSON.stringify({ aircraft: [], tanks: null, passkey: null }) };
       }
     }
 
@@ -114,19 +119,20 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
 
-  // Save shared config: aircraft list + tank calibration/levels
+  // Save shared config: aircraft list + tank calibration/levels + system passkey
   if (data.resource === 'config') {
     try {
       const sheets = google.sheets({ version: 'v4', auth: getAuth() });
       await ensureConfigSheet(sheets, spreadsheetId);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `'Config'!A1:B2`,
+        range: `'Config'!A1:B3`,
         valueInputOption: 'RAW',
         requestBody: {
           values: [
             ['aircraft_json', JSON.stringify(data.aircraft || [])],
-            ['tanks_json', JSON.stringify(data.tanks || {})]
+            ['tanks_json', JSON.stringify(data.tanks || {})],
+            ['passkey', data.passkey || '']
           ]
         }
       });
