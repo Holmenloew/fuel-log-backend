@@ -43,18 +43,20 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'GET') {
     const qs = event.queryStringParameters || {};
 
-    // Shared config: aircraft list + tank calibration/levels + system passkey
+    // Shared config: aircraft list + tank calibration/levels + system passkey + sign contact info
     if (qs.resource === 'config') {
       try {
         const sheets = google.sheets({ version: 'v4', auth: getAuth() });
         const res = await sheets.spreadsheets.values.get({
           spreadsheetId,
-          range: `'Config'!A1:B3`
+          range: `'Config'!A1:B5`
         });
         const rows = res.data.values || [];
         let aircraft = [];
         let tanks = null;
         let passkey = null;
+        let contactName = null;
+        let contactPhone = null;
         for (const row of rows) {
           if (row[0] === 'aircraft_json' && row[1]) {
             try { aircraft = JSON.parse(row[1]); } catch (e) {}
@@ -65,11 +67,17 @@ exports.handler = async (event) => {
           if (row[0] === 'passkey' && row[1]) {
             passkey = row[1];
           }
+          if (row[0] === 'contact_name' && row[1]) {
+            contactName = row[1];
+          }
+          if (row[0] === 'contact_phone' && row[1]) {
+            contactPhone = row[1];
+          }
         }
-        return { statusCode: 200, headers, body: JSON.stringify({ aircraft, tanks, passkey }) };
+        return { statusCode: 200, headers, body: JSON.stringify({ aircraft, tanks, passkey, contactName, contactPhone }) };
       } catch (err) {
         // Config tab doesn't exist yet — nothing has been saved there
-        return { statusCode: 200, headers, body: JSON.stringify({ aircraft: [], tanks: null, passkey: null }) };
+        return { statusCode: 200, headers, body: JSON.stringify({ aircraft: [], tanks: null, passkey: null, contactName: null, contactPhone: null }) };
       }
     }
 
@@ -119,20 +127,22 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
 
-  // Save shared config: aircraft list + tank calibration/levels + system passkey
+  // Save shared config: aircraft list + tank calibration/levels + system passkey + sign contact info
   if (data.resource === 'config') {
     try {
       const sheets = google.sheets({ version: 'v4', auth: getAuth() });
       await ensureConfigSheet(sheets, spreadsheetId);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `'Config'!A1:B3`,
+        range: `'Config'!A1:B5`,
         valueInputOption: 'RAW',
         requestBody: {
           values: [
             ['aircraft_json', JSON.stringify(data.aircraft || [])],
             ['tanks_json', JSON.stringify(data.tanks || {})],
-            ['passkey', data.passkey || '']
+            ['passkey', data.passkey || ''],
+            ['contact_name', data.contactName || ''],
+            ['contact_phone', data.contactPhone || '']
           ]
         }
       });
