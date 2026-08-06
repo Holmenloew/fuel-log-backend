@@ -21,6 +21,14 @@ async function ensureConfigSheet(sheets, spreadsheetId) {
   }
 }
 
+// The tabs that hold actual logged data (never includes Config — that holds settings, not history)
+const ALL_DATA_TABS = [
+  { name: 'Fuel Log - 100LL', range: 'A1:L10000' },
+  { name: 'Fuel Log - JETA1', range: 'A1:L10000' },
+  { name: 'Tank Readings - 100LL', range: 'A1:D10000' },
+  { name: 'Tank Readings - JETA1', range: 'A1:D10000' }
+];
+
 exports.handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -78,6 +86,28 @@ exports.handler = async (event) => {
       } catch (err) {
         // Config tab doesn't exist yet — nothing has been saved there
         return { statusCode: 200, headers, body: JSON.stringify({ aircraft: [], tanks: null, passkey: null, contactName: null, contactPhone: null }) };
+      }
+    }
+
+    // Full backup export: every logged data tab, headers included
+    if (qs.resource === 'export') {
+      const tabs = {};
+      try {
+        const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+        for (const tab of ALL_DATA_TABS) {
+          try {
+            const res = await sheets.spreadsheets.values.get({
+              spreadsheetId,
+              range: `'${tab.name}'!${tab.range}`
+            });
+            tabs[tab.name] = res.data.values || [];
+          } catch (e) {
+            tabs[tab.name] = []; // tab doesn't exist yet — nothing logged for it
+          }
+        }
+        return { statusCode: 200, headers, body: JSON.stringify({ tabs }) };
+      } catch (err) {
+        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
       }
     }
 
@@ -146,6 +176,32 @@ exports.handler = async (event) => {
           ]
         }
       });
+      return { statusCode: 200, headers, body: JSON.stringify({ status: 'ok' }) };
+    } catch (err) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    }
+  }
+
+  // Clear all logged data (fuel logs + tank readings) — never touches Config (aircraft list,
+  // calibration, passkey). Requires an exact confirmation token so this can never fire by accident.
+  if (data.resource === 'clear_all_data') {
+    if (data.confirm !== 'CLEAR_ALL_DATA') {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing or incorrect confirmation token' }) };
+    }
+    try {
+      const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+      for (const tab of ALL_DATA_TABS) {
+        try {
+          // Clear from row 2 onward — the header row is left in place
+          const headerRange = tab.range.replace(/^A1/, 'A2');
+          await sheets.spreadsheets.values.clear({
+            spreadsheetId,
+            range: `'${tab.name}'!${headerRange}`
+          });
+        } catch (e) {
+          // Tab doesn't exist yet — nothing to clear, safe to continue
+        }
+      }
       return { statusCode: 200, headers, body: JSON.stringify({ status: 'ok' }) };
     } catch (err) {
       return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
