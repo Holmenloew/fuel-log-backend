@@ -609,7 +609,7 @@
       <div style="overflow-x:auto;">
         <table class="cal-table aircraft-table">
           <thead>
-            <tr><th>Registration</th><th>Fuel Type</th><th>Address</th><th>Phone</th><th>Email</th><th></th></tr>
+            <tr><th>Registration</th><th>Fuel Type</th><th>Name</th><th>Address</th><th>Phone</th><th>Email</th><th></th></tr>
           </thead>
           <tbody id="aircraftBody"></tbody>
         </table>
@@ -713,6 +713,9 @@
     <div class="modal-box">
       <h3 style="margin-top:0;">New Aircraft — <span id="newAircraftReg"></span></h3>
       <p class="help" style="margin-top:0;">This registration isn't in the known aircraft list yet. Add billing details before logging the fueling — this is only needed once per aircraft.</p>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:12px;">Name
+        <input id="newAcName" type="text" placeholder="Owner or company name" style="margin-top:6px;">
+      </label>
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:12px;">Address
         <input id="newAcAddress" type="text" placeholder="Billing address" style="margin-top:6px;">
       </label>
@@ -3138,6 +3141,7 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
   const settingsPasswordError = el('settingsPasswordError');
   const newAircraftModal = el('newAircraftModal');
   const newAircraftReg = el('newAircraftReg');
+  const newAcName = el('newAcName');
   const newAcAddress = el('newAcAddress'), newAcPhone = el('newAcPhone'), newAcEmail = el('newAcEmail');
   const newAircraftError = el('newAircraftError');
   const gaugeTankLabel = el('gaugeTankLabel'), ledgerTitle = el('ledgerTitle');
@@ -3279,6 +3283,7 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
             <option value="JETA1" ${a.fuelType === 'JETA1' ? 'selected' : ''}>Jet A1</option>
           </select>
         </td>
+        <td><input type="text" class="ac-name" value="${escapeAttr(a.name)}" placeholder="Name"></td>
         <td><input type="text" class="ac-address" value="${escapeAttr(a.address)}" placeholder="Address"></td>
         <td><input type="text" class="ac-phone" value="${escapeAttr(a.phone)}" placeholder="Phone"></td>
         <td><input type="email" class="ac-email" value="${escapeAttr(a.email)}" placeholder="Email"></td>
@@ -3292,6 +3297,7 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
     return rows.map(row => ({
       reg: row.querySelector('.ac-reg').value.trim().toUpperCase(),
       fuelType: row.querySelector('.ac-fuel').value,
+      name: row.querySelector('.ac-name').value.trim(),
       address: row.querySelector('.ac-address').value.trim(),
       phone: row.querySelector('.ac-phone').value.trim(),
       email: row.querySelector('.ac-email').value.trim()
@@ -4274,6 +4280,7 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
     const record = {
       reg, date, liters, meterBefore: before, meterAfter: after, fuelType: activeTank, loggedBy,
       total: runningTotal !== null ? runningTotal.toFixed(1) : '',
+      name: billing ? billing.name : '',
       address: billing ? billing.address : '',
       phone: billing ? billing.phone : '',
       email: billing ? billing.email : ''
@@ -4311,12 +4318,13 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
   function showNewAircraftModal(details){
     pendingFueling = details;
     newAircraftReg.textContent = details.reg;
+    newAcName.value = '';
     newAcAddress.value = '';
     newAcPhone.value = '';
     newAcEmail.value = '';
     newAircraftError.textContent = '';
     newAircraftModal.style.display = 'flex';
-    newAcAddress.focus();
+    newAcName.focus();
   }
 
   function closeNewAircraftModal(){
@@ -4326,12 +4334,13 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
 
   async function confirmNewAircraft(){
     if(!pendingFueling) return;
+    const name = newAcName.value.trim();
     const address = newAcAddress.value.trim();
     const phone = newAcPhone.value.trim();
     const email = newAcEmail.value.trim();
-    const billing = { address, phone, email };
+    const billing = { name, address, phone, email };
 
-    aircraft.push({ reg: pendingFueling.reg, fuelType: activeTank, address, phone, email });
+    aircraft.push({ reg: pendingFueling.reg, fuelType: activeTank, name, address, phone, email });
     await saveAircraftLocal();
     const configResult = await pushSharedConfig();
     renderAircraftTable();
