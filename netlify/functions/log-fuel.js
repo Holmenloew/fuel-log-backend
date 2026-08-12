@@ -23,8 +23,8 @@ async function ensureConfigSheet(sheets, spreadsheetId) {
 
 // The tabs that hold actual logged data (never includes Config — that holds settings, not history)
 const ALL_DATA_TABS = [
-  { name: 'Fuel Log - 100LL', range: 'A1:L10000' },
-  { name: 'Fuel Log - JETA1', range: 'A1:L10000' },
+  { name: 'Fuel Log - 100LL', range: 'A1:M10000' },
+  { name: 'Fuel Log - JETA1', range: 'A1:M10000' },
   { name: 'Tank Readings - 100LL', range: 'A1:D10000' },
   { name: 'Tank Readings - JETA1', range: 'A1:D10000' }
 ];
@@ -137,7 +137,7 @@ exports.handler = async (event) => {
       const sheets = google.sheets({ version: 'v4', auth: getAuth() });
       const res = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `'${sheetName}'!A2:L10000`
+        range: `'${sheetName}'!A2:M10000`
       });
       return { statusCode: 200, headers, body: JSON.stringify({ rows: res.data.values || [] }) };
     } catch (err) {
@@ -182,6 +182,7 @@ exports.handler = async (event) => {
     }
   }
 
+  // Log a tank level reading (e.g. a refill), with an optional short note
   // Clear all logged data (fuel logs + tank readings) — never touches Config (aircraft list,
   // calibration, passkey). Requires an exact confirmation token so this can never fire by accident.
   if (data.resource === 'clear_all_data') {
@@ -208,7 +209,6 @@ exports.handler = async (event) => {
     }
   }
 
-  // Log a tank level reading (e.g. a refill), with an optional short note
   if (data.resource === 'tank_reading') {
     if (!data.fuelType || data.level === undefined || data.level === null) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fuelType or level' }) };
@@ -276,10 +276,10 @@ exports.handler = async (event) => {
     // Always keep the header row current, even for tabs created before this schema existed
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `'${sheetName}'!A1:L1`,
+      range: `'${sheetName}'!A1:M1`,
       valueInputOption: 'RAW',
       requestBody: {
-        values: [['Timestamp', 'Aircraft Registration', 'Date', 'Fuel Type', 'Meter Before (L)', 'Meter After (L)', 'Liters', 'Running Total (L)', 'Logged By', 'Address', 'Phone', 'Email']]
+        values: [['Timestamp', 'Aircraft Registration', 'Date', 'Fuel Type', 'Meter Before (L)', 'Meter After (L)', 'Liters', 'Running Total (L)', 'Logged By', 'Address', 'Phone', 'Email', 'Name']]
       }
     });
 
@@ -300,7 +300,8 @@ exports.handler = async (event) => {
           data.loggedBy || '',
           data.address || '',
           data.phone || '',
-          data.email || ''
+          data.email || '',
+          data.name || ''
         ]]
       }
     });
