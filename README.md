@@ -2,7 +2,7 @@
 
 A digital fueling log for **Värnamo Flygklubb**, replacing paper fuel records with a shared web app backed by a Google Sheet. Tracks two separate tanks — 100LL and Jet A1 — independently, with their own logs, gauges, and calibration.
 
-Live app: https://vfk-fuel.netlify.app
+
 
 ---
 
