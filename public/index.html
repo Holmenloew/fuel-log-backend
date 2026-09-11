@@ -345,6 +345,53 @@
     line-height:1.7;
   }
 
+  .success-toast{
+    position:fixed;
+    top:24px;
+    left:50%;
+    transform:translateX(-50%) translateY(-16px);
+    z-index:400;
+    background:rgba(34,197,94,0.90);
+    color:#ffffff;
+    padding:20px 32px;
+    border-radius:12px;
+    box-shadow:0 8px 28px rgba(0,0,0,0.35);
+    display:flex;
+    align-items:center;
+    gap:14px;
+    max-width:90vw;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease;
+  }
+  .success-toast.show{
+    opacity:1;
+    transform:translateX(-50%) translateY(0);
+  }
+  .success-toast .icon{
+    font-size:32px;
+    line-height:1;
+  }
+  .success-toast .text{
+    font-family:'Oswald',sans-serif;
+    text-transform:uppercase;
+    letter-spacing:1px;
+  }
+  .success-toast .text .headline{
+    font-size:20px;
+    font-weight:700;
+    display:block;
+  }
+  .success-toast .text .detail{
+    font-family:'JetBrains Mono',monospace;
+    text-transform:none;
+    letter-spacing:normal;
+    font-size:13px;
+    opacity:0.9;
+    display:block;
+    margin-top:2px;
+  }
+
   .gauge-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;}
   .gauge-value{font-family:'JetBrains Mono',monospace;text-align:center;margin-top:6px;}
   .gauge-value .num{font-size:26px;font-weight:700;color:var(--accent);}
@@ -397,6 +444,14 @@
 </style>
 </head>
 <body>
+
+<div id="successToast" class="success-toast">
+  <span class="icon">✓</span>
+  <span class="text">
+    <span class="headline">Logged</span>
+    <span class="detail" id="successToastDetail"></span>
+  </span>
+</div>
 
 <div id="systemGate" class="system-gate">
   <div class="modal-box" style="max-width:340px;">
@@ -3122,6 +3177,7 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
   const editMeterBeforeCheckbox = el('editMeterBeforeCheckbox');
   const computedLitersEl = el('computedLiters');
   const statusMsg = el('statusMsg'), ledgerBody = el('ledgerBody');
+  const successToast = el('successToast'), successToastDetail = el('successToastDetail');
   const remainingVolumeEl = el('remainingVolume'), capLabelEl = el('capLabel');
   const dispensedLabelEl = el('dispensedLabel');
   const gaugeSectionTitle = el('gaugeSectionTitle');
@@ -3179,6 +3235,16 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
   function flashStatus(msg, cls){
     statusMsg.textContent = msg;
     statusMsg.className = cls || '';
+  }
+
+  let successToastTimer = null;
+  function showSuccessToast(detail){
+    successToastDetail.textContent = detail || '';
+    successToast.classList.add('show');
+    clearTimeout(successToastTimer);
+    successToastTimer = setTimeout(() => {
+      successToast.classList.remove('show');
+    }, 2800);
   }
 
   function flashSettingsStatus(msg, cls){
@@ -4306,6 +4372,7 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
 
     if(result.ok){
       flashStatus(`Logged to the shared Sheet (${liters} L).`, 'ok');
+      showSuccessToast(`${reg} — ${liters} L — ${TANK_META[activeTank].label}`);
       lastMeterAfterByTank[activeTank] = after;
       updateLastMeterHint(activeTank);
       saveLoggedByName(loggedBy);
