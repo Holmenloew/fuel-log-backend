@@ -4218,6 +4218,15 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
     updateComputedLitersDisplay();
   }
 
+  function findDuplicateFueling(tank, before, after){
+    const rows = sheetRowsCache[tank];
+    if(!rows) return null; // can't check without verified data — nothing to compare against
+    return rows.find(r =>
+      Math.round(parseFloat(r[4])) === before &&
+      Math.round(parseFloat(r[5])) === after
+    ) || null;
+  }
+
   function meterSanityWarning(tank, before, after, liters){
     const warnings = [];
     const cap = tanks[tank] && tanks[tank].capacity;
@@ -4244,6 +4253,12 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
     const meterResult = computeLitersFromMeters();
     if(!meterResult.valid){ flashStatus(meterResult.reason, 'err'); return; }
     const { liters, before, after } = meterResult;
+
+    const duplicate = findDuplicateFueling(activeTank, before, after);
+    if(duplicate){
+      flashStatus(`Already registered — ${duplicate[1]} was already logged with this exact reading (Before ${before} L, After ${after} L) on ${duplicate[2]}. Not sent again.`, 'err');
+      return;
+    }
 
     const meterWarning = meterSanityWarning(activeTank, before, after, liters);
     if(meterWarning){
