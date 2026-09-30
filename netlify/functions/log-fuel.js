@@ -209,6 +209,42 @@ exports.handler = async (event) => {
     }
   }
 
+  // Update just the Note of an already-logged tank reading (e.g. adding price/liter once known),
+  // matched by its exact timestamp — never touches Timestamp, Fuel Type, or the level itself.
+  if (data.resource === 'update_tank_reading_note') {
+    if (!data.fuelType || !data.timestamp) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fuelType or timestamp' }) };
+    }
+    try {
+      const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+      const sheetName = 'Tank Readings - ' + data.fuelType;
+
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `'${sheetName}'!A2:D10000`
+      });
+      const rows = res.data.values || [];
+      const rowIndex = rows.findIndex(r => r[0] === data.timestamp);
+      if (rowIndex === -1) {
+        return { statusCode: 404, headers, body: JSON.stringify({ error: 'Reading not found — it may have been changed or cleared since this page was loaded' }) };
+      }
+
+      const sheetRowNumber = rowIndex + 2; // +2: row 1 is the header, array is 0-indexed
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${sheetName}'!D${sheetRowNumber}`,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: [[data.note || '']]
+        }
+      });
+
+      return { statusCode: 200, headers, body: JSON.stringify({ status: 'ok' }) };
+    } catch (err) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    }
+  }
+
   if (data.resource === 'tank_reading') {
     if (!data.fuelType || data.level === undefined || data.level === null) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fuelType or level' }) };
