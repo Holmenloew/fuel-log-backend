@@ -646,10 +646,10 @@
       <h3>Reading &amp; Refill History</h3>
       <table class="cal-table" id="readingHistoryTable">
         <thead>
-          <tr><th>When</th><th class="num">Level (L)</th><th>Note</th></tr>
+          <tr><th>When</th><th class="num">Level (L)</th><th>Note</th><th></th></tr>
         </thead>
         <tbody id="readingHistoryBody">
-          <tr><td colspan="3" class="empty-row">No readings logged yet.</td></tr>
+          <tr><td colspan="4" class="empty-row">No readings logged yet.</td></tr>
         </tbody>
       </table>
 
@@ -3934,6 +3934,23 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
     }
   }
 
+  async function updateTankReadingNote(tank, timestamp, note){
+    if(!config.endpointUrl) return { ok:false, reason:'no-endpoint' };
+    try{
+      const res = await fetch(config.endpointUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Api-Key': config.apiKey || '' },
+        body: JSON.stringify({ resource: 'update_tank_reading_note', fuelType: tank, timestamp, note: note || '' })
+      });
+      let body = {};
+      try{ body = await res.json(); }catch(e){}
+      if(!res.ok) return { ok:false, reason: body.error || `HTTP ${res.status}` };
+      return { ok:true };
+    }catch(err){
+      return { ok:false, reason: err.message };
+    }
+  }
+
   async function fetchTankReadings(tank){
     if(!config.endpointUrl) return { ok:false, reason:'no-endpoint' };
     try{
@@ -3953,18 +3970,31 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
     }
   }
 
+  let lastReadingRows = [];
+  let editingReadingTimestamp = null;
+
   function renderReadingHistory(rows){
+    lastReadingRows = rows || [];
     if(!rows || rows.length === 0){
-      readingHistoryBody.innerHTML = '<tr><td colspan="3" class="empty-row">No readings logged yet.</td></tr>';
+      readingHistoryBody.innerHTML = '<tr><td colspan="4" class="empty-row">No readings logged yet.</td></tr>';
       return;
     }
     const html = rows.map(row => {
       const [timestamp, , level, note] = row;
       const when = timestamp ? new Date(timestamp).toLocaleString() : '';
-      return `<tr>
+      const isEditing = editingReadingTimestamp === timestamp;
+      const noteCell = isEditing
+        ? `<input type="text" class="note-edit-input" value="${escapeAttr(note)}" style="width:100%;">`
+        : `<span class="note-display">${note || ''}</span>`;
+      const actionCell = isEditing
+        ? `<button class="tiny save-note-btn" type="button" style="color:var(--teal);border-color:var(--teal);">Save</button>
+           <button class="tiny cancel-note-btn" type="button">Cancel</button>`
+        : `<button class="tiny edit-note-btn" type="button">Edit</button>`;
+      return `<tr data-timestamp="${escapeAttr(timestamp)}">
         <td>${when}</td>
         <td class="num">${(parseFloat(level)||0).toFixed(1)}</td>
-        <td>${note || ''}</td>
+        <td>${noteCell}</td>
+        <td style="white-space:nowrap;">${actionCell}</td>
       </tr>`;
     });
     readingHistoryBody.innerHTML = html.reverse().join('');
@@ -4527,6 +4557,35 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
     recordLevel(parseFloat(knownLevelInput.value));
   });
   document.getElementById('setPumpCalibBtn').addEventListener('click', setPumpCalibration);
+  readingHistoryBody.addEventListener('click', async (ev) => {
+    const row = ev.target.closest('tr');
+    if(!row) return;
+    const timestamp = row.dataset.timestamp;
+
+    if(ev.target.classList.contains('edit-note-btn')){
+      editingReadingTimestamp = timestamp;
+      renderReadingHistory(lastReadingRows);
+      return;
+    }
+    if(ev.target.classList.contains('cancel-note-btn')){
+      editingReadingTimestamp = null;
+      renderReadingHistory(lastReadingRows);
+      return;
+    }
+    if(ev.target.classList.contains('save-note-btn')){
+      const input = row.querySelector('.note-edit-input');
+      const newNote = input ? input.value.trim() : '';
+      const result = await updateTankReadingNote(activeTank, timestamp, newNote);
+      if(result.ok){
+        editingReadingTimestamp = null;
+        flashSettingsStatus('Note updated.', 'ok');
+        await refreshReadingHistory(activeTank);
+      }else{
+        flashSettingsStatus(`Could not update note: ${result.reason}`, 'err');
+      }
+      return;
+    }
+  });
   document.getElementById('resetDispensedBtn').addEventListener('click', resetDispensedCounter);
   document.getElementById('savePasskeyBtn').addEventListener('click', savePasskey);
   document.getElementById('showQrBtn').addEventListener('click', showQrCode);
